@@ -1,0 +1,17 @@
+(function(){
+let enabled=false,available=false,liveAvailable=false,recordings={},audio=null,url=null,controller=null,token=0,fallingBack=false,playing=false;
+try{enabled=localStorage.getItem('wonderwild-human-voice')==='true';}catch{}
+function stop(){token++;controller?.abort();controller=null;if(audio){audio.pause();audio.src='';audio=null;}if(url){URL.revokeObjectURL(url);url=null;}playing=false;}
+function statusUI(){const n=document.getElementById('human-voice-status'),c=document.getElementById('human-voice-choice'),count=Object.keys(recordings).length;if(n)n.textContent=count?`${count} recorded voice clips are ready. Replaying them does not generate new speech.`:liveAvailable?'ElevenLabs is connected. Enable it below to use the configured voice.':'Human-style voice is not connected yet. Pip can still read using your browser’s voice.';if(c){c.disabled=!available;c.checked=enabled&&available;}}
+async function textHash(text){const bytes=new TextEncoder().encode(text.normalize('NFC').replace(/\s+/g,' ').trim());return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');}
+async function speak(text,{rate,status,fallback}){stop();const generation=token;controller=new AbortController();const requestController=controller;let timeout=setTimeout(()=>requestController.abort(),15000);status('Preparing Pip’s voice…');try{
+ const clip=recordings[await textHash(text)];if(generation!==token)return;
+ if(clip){audio=new Audio(clip.src);audio.playbackRate=Math.max(.5,Math.min(2,(Number(rate)||.85)/clip.baseRate));audio.preservesPitch=true;}
+ else{if(!liveAvailable)throw Error('No recording');const res=await fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,rate}),signal:controller.signal});if(!res.ok)throw Error('Voice unavailable');const blob=await res.blob();if(generation!==token)return;url=URL.createObjectURL(blob);audio=new Audio(url);}
+ audio.onplaying=()=>{if(generation===token){playing=true;status('Pip is reading.');}};audio.onended=()=>{if(generation===token){stop();status('Your turn. Take your time.');}};audio.onerror=()=>{if(generation===token){stop();fallingBack=true;try{fallback();}finally{fallingBack=false;}}};await audio.play();
+ }catch{if(generation!==token)return;stop();fallingBack=true;try{fallback();}finally{fallingBack=false;}}finally{clearTimeout(timeout);}}
+Promise.all([Promise.resolve({available:false}),fetch('audio/manifest.json').then(r=>r.ok?r.json():{}).catch(()=>({}))]).then(([live,manifest])=>{liveAvailable=live.available===true;if(manifest.version===1&&manifest.clips&&typeof manifest.clips==='object')for(const [key,clip]of Object.entries(manifest.clips)){if(/^[a-f0-9]{64}$/.test(key)&&clip&&/^audio\/[a-f0-9]{64}\.mp3$/.test(clip.src)&&Number.isFinite(clip.baseRate)&&clip.baseRate>=.7&&clip.baseRate<=1.2)recordings[key]=clip;}available=liveAvailable||Object.keys(recordings).length>0;statusUI();});
+new MutationObserver(statusUI).observe(document.getElementById('app'),{childList:true});
+document.addEventListener('change',e=>{if(e.target.id==='human-voice-choice'){enabled=available&&e.target.checked;try{localStorage.setItem('wonderwild-human-voice',String(enabled));}catch{}stop();}});
+window.addEventListener('pagehide',stop);window.WonderVoice={get enabled(){return enabled&&available},get fallingBack(){return fallingBack},get playing(){return playing},speak,stop};
+})();
