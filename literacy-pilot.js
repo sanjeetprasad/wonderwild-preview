@@ -31,6 +31,18 @@ const lessons=rows.map(([grade,key,title,objective,prerequisite,pattern,words,pa
  const questions=checks.map(([question,options,answer,explanation])=>({question,options,answer,explanation}));
  return {id:`literacy-pilot-${grade}-${key}`,subject:'reading',grade,kind:'phonics',title,objective,standard:null,minutes:8,order:200+index,pilot:true,prerequisite,reviewStatus:'educator-review-needed',questions,phonics:{title,objective,pattern,words,parts,question:questions[0].question,contrast:questions[0].options,answer:questions[0].answer},parentPractice:'After the on-screen checks, cover the word and ask your child to say it, then build or write it. Model it again if needed. These oral and paper activities are not automatically scored.'};
 });
+const passages={
+ map:{title:'Sam and the mat',sentences:['Sam sat.','Sam sat at a mat.','Sam taps a map.'],newWords:['Sam','at','taps'],helperWords:['a'],note:'Introduce Sam as a name. Blend at. In taps, keep both ending sounds, p and s. A grown-up models the helper word a.',check:['What does Sam tap?',['A map','A pot','A pen'],0,'The last sentence says Sam taps a map. Point to map in the text.']},
+ hen:{title:'Hen and Ben',sentences:['Ben has a hen.','A hen has a pen.','Ben gets a pet.'],newWords:['Ben','has','gets'],helperWords:['a'],note:'Introduce Ben as a name. In has, s represents the z sound. In gets, keep both ending sounds, t and s. Here, a pen is an enclosure for an animal.',check:['Which animal does Ben have?',['A dog','A hen','A cat'],1,'The first sentence says Ben has a hen. Read that sentence again to check.']},
+ pot:{title:'A pot for Pip',sentences:['Pip has a pot.','Pip taps a pot.','A dog sits.'],newWords:['Pip','has','taps','sits'],helperWords:['a'],note:'Introduce Pip as a name. In has, s represents the z sound. Keep both final consonant sounds in taps and sits. A grown-up models a.',check:['Who taps a pot?',['A dog','Sam','Pip'],2,'The second sentence says Pip taps a pot. Find Pip at the start of that sentence.']},
+ ship:{title:'Fish at the shop',sentences:['A fish swims.','A fish swims in a shop.','A ship is at a shop.'],newWords:['swims','in','is','at'],helperWords:['a'],note:'Practise swims with a grown-up: s, w, short i, m, z. In is and swims, s can represent the z sound. A grown-up models a. This is an imagined shop with a fish tank and a model ship.',check:['Where does the fish swim?',['In a pond','In a shop','In a cup'],1,'The second sentence says the fish swims in a shop. Return to the text to find the answer.']}
+};
+for(const [key,p] of Object.entries(passages)){
+ const lesson=lessons.find(l=>l.id.endsWith('-'+key));
+ const [question,options,answer,explanation]=p.check;
+ lesson.phonics.connected={title:p.title,sentences:p.sentences,newWords:p.newWords,helperWords:p.helperWords,note:p.note};
+ lesson.questions.push({question,options,answer,explanation});
+}
 root.WonderCurriculum.lessons.push(...lessons);
 root.WonderLiteracy={lessons};
 })(globalThis);
