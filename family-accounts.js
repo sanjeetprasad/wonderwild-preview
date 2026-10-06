@@ -1,5 +1,6 @@
 (function(root){
 'use strict';
+let refreshEpoch=0;
 const marker='wonderwild-family-active';let me=null,children=[],available=null,busy=false,message='',mounted=null;
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const active=()=>root.WonderProfileStorage.active();
@@ -16,10 +17,23 @@ function render(){
  '<label class="family-discard"><input type="checkbox" id="family-discard"> Discard unsaved completed-lesson changes when reloading or signing out</label><button type="button" class="secondary" id="family-logout">Sign out</button><p>Signing out does not erase profile data already stored in this browser.</p>';
  slot.innerHTML='<h2 class="subheading">Parent sign-in &amp; family accounts</h2><p class="family-pilot">Local pilot · email verification and password recovery are not connected. Use test accounts and nicknames. Opening a child locks parent controls in this browser session; a parent signs in again to unlock them.</p><fieldset class="family-controls" '+(busy?'disabled':'')+'>'+body+'</fieldset><p id="family-message" role="status">'+escape(message)+'</p>';
 }
-async function refresh(){try{const status={available:false};available=status.available===true;if(!available){render();return;}try{me=await api('/api/family/me');children=(await api('/api/family/children')).children;const p=active();if(p&&(p.owner!==me.id||!children.some(c=>c.id===p.id))){sessionStorage.removeItem(marker);location.hash='parents';location.reload();return;}}catch(e){if(e.status!==401)throw e;me=null;children=[];if(active()){sessionStorage.removeItem(marker);location.hash='parents';location.reload();return;}}}catch{available=false;}render();}
-async function run(task){if(busy)return;busy=true;message='Working…';render();try{await task();}catch(e){message=e.message;}finally{busy=false;render();}}
+async function refresh(){
+ const epoch=++refreshEpoch;me=null;children=[];available=null;render();
+ try{
+  const status={available:false};if(epoch!==refreshEpoch)return;
+  available=status.available===true;if(!available){render();return;}
+  try{
+   const nextMe=await api('/api/family/me');const nextChildren=(await api('/api/family/children')).children;
+   if(epoch!==refreshEpoch)return;me=nextMe;children=nextChildren;
+   const p=active();if(p&&(p.owner!==me.id||!children.some(c=>c.id===p.id))){sessionStorage.removeItem(marker);location.hash='parents';location.reload();return;}
+  }catch(e){if(epoch!==refreshEpoch)return;if(e.status!==401)throw e;me=null;children=[];if(active()){sessionStorage.removeItem(marker);location.hash='parents';location.reload();return;}}
+ }catch{if(epoch!==refreshEpoch)return;me=null;children=[];available=false;}
+ if(epoch===refreshEpoch)render();
+}
+async function run(task){if(busy)return;busy=true;message='Working…';render();try{await task();}catch(e){if(e.status===401||e.status===403)await refresh();message=e.message;}finally{busy=false;render();}}
 document.addEventListener('submit',e=>{if(!['family-auth','family-child'].includes(e.target.id))return;e.preventDefault();const form=new FormData(e.target),action=e.submitter?.value,id=e.target.id;run(async()=>{if(id==='family-auth'){if(dirty())throw Error('Save the current child’s progress before signing in again.');const signup=action==='signup';await api('/api/auth/'+(signup?'sign-up/email':'sign-in/email'),'POST',{email:String(form.get('email')).trim(),password:form.get('password'),...(signup?{name:'Parent'}:{})});message='Signed in. Create or open a child profile.';await refresh();}else{await api('/api/family/children','POST',{nickname:form.get('nickname'),grade:Number(form.get('grade')),avatar:'pip'});children=(await api('/api/family/children')).children;message='Profile added. Open learning to begin.';}});});
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyOpen){const id=b.dataset.familyOpen,discard=b.dataset.familyReload==='true'&&document.getElementById('family-discard')?.checked;run(async()=>{if(dirty()&&!discard)throw Error('Save the current child’s progress before opening another profile.');const data=await api(`/api/family/children/${id}/progress`);if(me.role!=='child'){await api(`/api/family/children/${id}/open`,'POST',{});me={id:me.id,role:'child',childId:id};children=[data.child];}const p={id,owner:me.id,nickname:data.child.nickname,revision:data.revision,saved:JSON.stringify(data.snapshot)};const key=root.WonderProfileStorage.keyFor(id,'wonderwild-school-v2');const previous=localStorage.getItem(key);try{localStorage.setItem(key,JSON.stringify({...JSON.parse(previous||'null'),...data.snapshot}));sessionStorage.setItem(marker,JSON.stringify(p));}catch(err){if(previous===null)localStorage.removeItem(key);else localStorage.setItem(key,previous);throw Error('Browser storage is unavailable. Parent controls are locked, but the learning space could not open. Retry or sign in to unlock.');}location.hash='explore';location.reload();});}else if(b.id==='family-save'){run(async()=>{const p=active();if(!p)throw Error('Open a child profile first.');const snapshot=root.WonderFamilyBridge.snapshot();const saved=await api(`/api/family/children/${p.id}/progress`,'PUT',{revision:p.revision,snapshot});sessionStorage.setItem(marker,JSON.stringify({...p,revision:saved.revision,saved:JSON.stringify(snapshot)}));message='Progress saved to the local family server. You can safely switch profiles.';});}else if(b.id==='family-logout'){const discard=document.getElementById('family-discard').checked;run(async()=>{if(dirty()&&!discard)throw Error('Save progress first, or select the discard option before signing out.');await api('/api/auth/sign-out','POST',{});sessionStorage.removeItem(marker);location.hash='parents';location.reload();});}});
-new MutationObserver(()=>{const slot=document.getElementById('family-panel');if(slot&&slot!==mounted)render();}).observe(document.getElementById('app'),{childList:true,subtree:true});
+new MutationObserver(()=>{const slot=document.getElementById('family-panel');if(slot&&slot!==mounted)refresh();}).observe(document.getElementById('app'),{childList:true,subtree:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!busy)refresh();});
 refresh();
 })(globalThis);
