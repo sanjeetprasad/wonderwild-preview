@@ -11,7 +11,7 @@ else if(op==='÷'&&b>0){let remainder=0;for(const digit of String(a)){const tota
 return out;}
 function fromProblem(p){const m=p.prompt.match(/^(\d+)\s*([+−×÷])\s*(\d+)$/);return m?steps(Number(m[1]),Number(m[3]),m[2]):[];}
 function sentences(text){return text.match(/[^.!?]+[.!?]+[”’"']?|[^.!?]+$/g)?.map(s=>s.trim()).filter(Boolean)||[text];}
-const spellingIds=['short-a','mixed-vowels','letter-teams','consonant-groups','silent-e'];
+const spellingIds=['short-e-o','two-syllables','short-a','mixed-vowels','letter-teams','consonant-groups','silent-e'];
 function spellingRecords(rows,strict=false){
  if(!Array.isArray(rows)){if(strict)throw Error('Invalid spelling history');return[];}
  if(strict&&rows.length>10)throw Error('Too many spelling summaries');
